@@ -20,7 +20,7 @@ usersRouter.get('/:id', async (request, response, next) => {
     const id = request.params.id;
     const userFound = await User.find({ _id: id });
 
-    if (!userFound) {
+    if (userFound.length === 0) {
       return response.status(404).end();
     }
 
@@ -34,7 +34,7 @@ usersRouter.get('/:id', async (request, response, next) => {
 usersRouter.post('/', async (req, res) => {
   try {
     if (!req.body.name) {
-      return response.status(400).json({
+      return res.status(400).json({
         error: 'name missing',
       });
     }
@@ -53,39 +53,49 @@ usersRouter.post('/', async (req, res) => {
 });
 
 // localhost:3000/api/users/:id
-usersRouter.patch('/:id', async (req, res) => {
+usersRouter.patch('/:id', async (req, res, next) => {
   const userId = req.params.id;
   const userFields = req.body;
+  
   try {
+    // Validar que se envíen datos para actualizar
+    if (!userFields || Object.keys(userFields).length === 0) {
+      return res.status(400).json({ message: 'No fields to update provided' });
+    }
+
+    // Validar que si se envía name, no esté vacío
+    if (userFields.name !== undefined && !userFields.name.trim()) {
+      return res.status(400).json({ message: 'Name cannot be empty' });
+    }
+
     // buscar el usuario por el id y si lo encuentra lo va a actualizar con los campos que le pasemos
     const updatedUser = await User.findByIdAndUpdate(userId, userFields, {
       new: true,
+      runValidators: true,
     });
 
     if (!updatedUser) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // res.status(200).json(updatedUser);
-    // res.status(200).json({ message: 'User Updated correctly'});
-    res.status(200).end();
+    res.status(200).json(updatedUser);
   } catch (error) {
     next(error);
   }
 });
 
 // localhost:3000/api/users/:id
-usersRouter.delete('/:id', async (req, res) => {
+usersRouter.delete('/:id', async (req, res, next) => {
   const userId = req.params.id;
+  
   try {
-    const deletedUser = await User.findByIdAndRemove(userId);
+    const deletedUser = await User.findByIdAndDelete(userId);
 
     if (!deletedUser) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // res.status(200).json(deletedUser);
-    res.status(200).end();
+    res.status(200).json({ message: 'User deleted successfully', deletedUser });
   } catch (error) {
     next(error);
   }

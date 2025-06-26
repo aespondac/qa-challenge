@@ -1,0 +1,70 @@
+# Dependabot configuration for automatic dependency updates
+# This helps maintain security by keeping dependencies up-to-date
+
+version: 2
+
+updates:
+  # Node.js dependencies (node-challenge)
+  - package-ecosystem: "npm"
+    directory: "/node-challenge"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "qa-team"
+    assignees:
+      - "maintainer"
+    commit-message:
+      prefix: "npm"
+      prefix-development: "npm-dev"
+      include: "scope"
+
+  # Python dependencies (python-challenge)
+  - package-ecosystem: "pip"
+    directory: "/python-challenge"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "qa-team"
+    assignees:
+      - "maintainer"
+    commit-message:
+      prefix: "pip"
+      include: "scope"
+
+  # E2E testing dependencies (e2e-challenge)
+  - package-ecosystem: "npm"
+    directory: "/e2e-challenge"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "qa-team"
+    assignees:
+      - "maintainer"
+    commit-message:
+      prefix: "e2e"
+      include: "scope"
+
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "devops-team"
+    assignees:
+      - "maintainer"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

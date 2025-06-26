@@ -1,0 +1,183 @@
+# GitHub Actions CI/CD Pipeline
+
+name: QA Challenge CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-node:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: node-challenge/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./node-challenge
+      run: npm ci
+    
+    - name: Run tests
+      working-directory: ./node-challenge
+      run: npm test
+    
+    - name: Run tests with coverage
+      working-directory: ./node-challenge
+      run: npm test -- --coverage
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ./node-challenge/coverage
+        flags: nodejs
+
+  test-python:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11, 3.12]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      working-directory: ./python-challenge
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run tests
+      working-directory: ./python-challenge
+      run: |
+        python -m pytest tests/ -v --cov=app --cov-report=xml --cov-report=html
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        directory: ./python-challenge
+        flags: python
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  lint-and-format:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: node-challenge/package-lock.json
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Node.js dependencies
+      working-directory: ./node-challenge
+      run: npm ci
+    
+    - name: Install Python dependencies
+      working-directory: ./python-challenge
+      run: |
+        python -m pip install --upgrade pip
+        pip install black flake8 isort
+        pip install -r requirements.txt
+    
+    - name: Lint JavaScript
+      working-directory: ./node-challenge
+      run: |
+        # Add ESLint when configured
+        echo "ESLint would run here"
+    
+    - name: Format and lint Python
+      working-directory: ./python-challenge
+      run: |
+        black --check .
+        isort --check-only .
+        flake8 .
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: [test-node, test-python]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: e2e-challenge/package-lock.json
+    
+    - name: Install dependencies
+      working-directory: ./e2e-challenge
+      run: npm ci
+    
+    - name: Install Playwright browsers
+      working-directory: ./e2e-challenge
+      run: npx playwright install --with-deps
+    
+    - name: Run E2E tests
+      working-directory: ./e2e-challenge
+      run: npm test
+      env:
+        TEST_URL: https://pas.personicore.com
+        TEST_EMAIL: tester@example.com
+        TEST_PASSWORD: Test1234!
+    
+    - name: Upload E2E test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: e2e-test-results
+        path: e2e-challenge/test-results/
+    
+    - name: Upload E2E HTML report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: e2e-html-report
+        path: e2e-challenge/playwright-report/

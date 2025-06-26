@@ -1,0 +1,181 @@
+# Security Analysis Workflow
+# Ejecuta análisis de seguridad avanzados y escaneos de vulnerabilidades
+
+name: Security Analysis
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Ejecutar análisis de seguridad semanalmente
+    - cron: '0 2 * * 1'  # Lunes a las 2 AM UTC
+
+jobs:
+  codeql-analysis:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript', 'python' ]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v2
+      with:
+        languages: ${{ matrix.language }}
+
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v2
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v2
+      with:
+        category: "/language:${{matrix.language}}"
+
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Node.js dependencies
+      working-directory: ./node-challenge
+      run: npm audit --audit-level=moderate
+
+    - name: Install E2E dependencies
+      working-directory: ./e2e-challenge
+      run: npm audit --audit-level=moderate
+
+    - name: Python Security Scan with Safety
+      working-directory: ./python-challenge
+      run: |
+        pip install safety
+        safety check -r requirements.txt
+
+    - name: Python Security Scan with Bandit
+      working-directory: ./python-challenge
+      run: |
+        pip install bandit
+        bandit -r . -f json -o bandit-report.json || true
+
+    - name: Upload Bandit scan results
+      uses: actions/upload-artifact@v3
+      with:
+        name: bandit-security-report
+        path: python-challenge/bandit-report.json
+
+  secret-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Run TruffleHog OSS
+      uses: trufflesecurity/trufflehog@main
+      with:
+        path: ./
+        base: main
+        head: HEAD
+        extra_args: --debug --only-verified
+
+  license-scan:
+    name: License Compliance
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+
+    - name: Check Node.js licenses
+      working-directory: ./node-challenge
+      run: |
+        npm install -g license-checker
+        npm ci
+        license-checker --summary
+
+    - name: Check E2E licenses
+      working-directory: ./e2e-challenge
+      run: |
+        npm ci
+        license-checker --summary
+
+    - name: Check Python licenses
+      working-directory: ./python-challenge
+      run: |
+        pip install pip-licenses
+        pip install -r requirements.txt
+        pip-licenses --format=json --output-file=licenses.json
+
+    - name: Upload license report
+      uses: actions/upload-artifact@v3
+      with:
+        name: license-compliance-report
+        path: python-challenge/licenses.json
+
+  container-scan:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Run Trivy in table format
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'table'
+        output: 'trivy-results.txt'
+
+    - name: Upload Trivy table results
+      uses: actions/upload-artifact@v3
+      with:
+        name: trivy-security-report
+        path: trivy-results.txt
